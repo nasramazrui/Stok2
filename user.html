@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SmartStock | User</title>
+<style>
+body { font-family:'Poppins', sans-serif; margin:0; background:#f5f6fa; }
+header { background:#2e7d32; color:white; text-align:center; padding:12px; font-size:22px; font-weight:600; }
+table { width:95%; margin:20px auto; border-collapse:collapse; background:white; border-radius:12px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+th, td { border:1px solid #ddd; padding:10px; text-align:center; font-size:15px; }
+th { background:#4CAF50; color:white; }
+tr:nth-child(even){ background:#f2f2f2; }
+button { margin:5px; padding:8px 12px; border:none; border-radius:6px; background:#0b84ff; color:white; cursor:pointer; }
+@media(max-width:768px){ table{ font-size:14px;} th,td{ padding:8px;} header{ font-size:18px; } button{ width:48%; margin:4px 1%; } }
+</style>
+</head>
+<body>
+
+<header>📦 SmartStock – User Panel</header>
+
+<div style="text-align:center;">
+  <button id="exportExcel">Export Excel</button>
+  <button id="exportPDF">Export PDF</button>
+</div>
+
+<table>
+<thead>
+<tr>
+<th>Product</th>
+<th>Opening Balance</th>
+<th>Stock In</th>
+<th>Stock Out</th>
+<th>Current Balance</th>
+</tr>
+</thead>
+<tbody id="productTable">
+<tr><td colspan="5">Loading...</td></tr>
+</tbody>
+</table>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyCtN8XDQR6klLOnu7w6C0j1mTRxQsLd9zA",
+  authDomain: "stokuyamariam.firebaseapp.com",
+  databaseURL: "https://stokuyamariam-default-rtdb.firebaseio.com",
+  projectId: "stokuyamariam",
+  storageBucket: "stokuyamariam.firebasestorage.app",
+  messagingSenderId: "622453509801",
+  appId: "1:622453509801:web:0b3baab46496d2746f63b8"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const productTable = document.getElementById("productTable");
+
+function loadProducts() {
+  const productsRef = ref(db, "products");
+  onValue(productsRef, async (snapshot) => {
+    productTable.innerHTML = "";
+    const data = snapshot.val() || {};
+
+    for (const [pid, p] of Object.entries(data)) {
+      // Calculate total Stock In / Stock Out
+      const txRef = ref(db, "transactions/" + pid);
+      await new Promise(resolve=>{
+        onValue(txRef, (txSnap)=>{
+          const txs = txSnap.val() || {};
+          let stockIn=0, stockOut=0;
+          Object.values(txs).forEach(tx=>{
+            if(tx.type==='in') stockIn += Number(tx.qty||0);
+            if(tx.type==='out') stockOut += Number(tx.qty||0);
+          });
+          const opening = Number(p.openingBalance) || 0;
+          const current = Number(p.currentBalance ?? opening);
+
+          const row = `
+          <tr>
+            <td>${p.name||'-'}</td>
+            <td>${opening}</td>
+            <td>${stockIn}</td>
+            <td>${stockOut}</td>
+            <td><strong>${current}</strong></td>
+          </tr>`;
+          productTable.innerHTML += row;
+          resolve();
+        }, { onlyOnce:true });
+      });
+    }
+
+    if(Object.keys(data).length===0){
+      productTable.innerHTML='<tr><td colspan="5">Hakuna bidhaa kwa sasa</td></tr>';
+    }
+  });
+}
+
+loadProducts();
+</script>
+
+<!-- Export Excel -->
+<script>
+const exportBtn = document.getElementById("exportExcel");
+exportBtn.addEventListener("click",()=>{
+  const table = document.getElementById("productTable");
+  let csv = [];
+  for(let row of table.rows){
+    let cols = [];
+    for(let cell of row.cells){
+      cols.push(cell.innerText.replace(/,/g,""));
+    }
+    csv.push(cols.join(","));
+  }
+  const csvContent = "data:text/csv;charset=utf-8," + csv.join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download","SmartStock.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+});
+</script>
+
+<!-- Export PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+<script>
+document.getElementById("exportPDF").addEventListener("click",()=>{
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let rows = [];
+  const table = document.getElementById("productTable");
+  for(let row of table.rows){
+    let cols = [];
+    for(let cell of row.cells){
+      cols.push(cell.innerText);
+    }
+    rows.push(cols);
+  }
+  doc.autoTable({ head:[rows[0]], body:rows.slice(1) });
+  doc.save("SmartStock.pdf");
+});
+</script>
+
+</body>
+</html>
